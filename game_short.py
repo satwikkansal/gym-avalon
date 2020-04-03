@@ -4,18 +4,6 @@ from enum import Enum
 import random
 
 
-"""
-Evil aka Minions of mordred
-Good aka Servants of mordred
-
-Merlin: The person who knows who evils are
-
-
-If evils guess at the end of the game, who the merlin is, the evils win.
-"""
-
-
-# Number of players: [[good_size, evil_size], [mission team size for each round]]
 player_config = namedtuple('player_config', ['team_split', 'quest_size'])
 
 game_player_configs = {
@@ -54,6 +42,9 @@ class Player:
             self.team = Team.EVIL
         else:
             self.team = Team.GOOD
+
+    def __str__(self):
+        return f'Player {self.player_id} ({self.char_type})'
 
     # Action
     def approve_or_reject_quest(self):
@@ -103,7 +94,32 @@ class AvalonGame:
             ActionType.TEAM_SELECTION: self.generate_team_selection_turns()
         }
 
+        self.current_player = None
         self.winner = None
+
+    def __str__(self):
+        # print(self.current_action_type, len(self.pending_turns[self.current_action_type]))
+        string = f"""
+        Current Quest: {self.current_quest}
+        Current Action: {self.current_action_type}
+        Current team: {self._players_string(self.current_team)}
+        Player turn: {self.current_player}
+        Wins: Good {self.good_team_wins} / Evil {self.evil_team_wins}
+        """
+        team_approval_info = f'''
+        Current Proposal: {self.current_proposal_number}
+        Approvals so far: {self.approvals}
+        Leader id: {self.current_leader}'''
+
+        player_turns_string = "\n\t\t".join([ f"{k}: {self._players_string(v)}" for k, v in self.pending_turns.items()])
+        player_turns_info = f'''
+        Next turns: 
+        {player_turns_string}
+'''
+        return string + team_approval_info + player_turns_info
+
+    def _players_string(self, players_list):
+        return ', '.join([str(p) for p in players_list])
 
     def initialize_players(self):
         """
@@ -136,8 +152,8 @@ class AvalonGame:
             self.winner = "Good"
             return True  # Game Over
 
-        current_player = self.pending_turns[self.current_action_type].pop(0)
-        if current_player.is_agent():
+        self.current_player = self.pending_turns[self.current_action_type].pop(0)
+        if self.current_player.is_agent():
             # Return so that the current team and everything can be updated
             return self.current_action_type
 
@@ -146,16 +162,13 @@ class AvalonGame:
             if self.current_proposal_number - 1 == self.max_proposals_allowed:
                 return True  # Game over
 
-            if not self.pending_turns[self.current_action_type]:
-                raise Exception
-
-            self.make_team_selection_move(current_player)
+            self.make_team_selection_move(self.current_player)
 
         elif self.current_action_type == ActionType.TEAM_APPROVAL:
-            self.make_team_approval_move(current_player)
+            self.make_team_approval_move(self.current_player)
 
         elif self.current_action_type == ActionType.QUEST_VOTE:
-            self.make_quest_vote_move(current_player)
+            self.make_quest_vote_move(self.current_player)
 
         else:
             raise Exception("Invalid action type")
@@ -168,6 +181,8 @@ class AvalonGame:
             # Pick based on heuristics
             self.current_team = self.pick_quest_team(num_picks)
 
+        print(f"{player} picked the team {self._players_string(self.current_team)}")
+
         self.current_leader = (self.current_leader + 1) % self.num_players
         self.current_proposal_number += 1
         self.initialize_team_approval_round()
@@ -178,6 +193,8 @@ class AvalonGame:
             response = player.approve_or_reject_quest()
         self.approvals += response
 
+        print(f'{player} {"Approved" if response else "Rejected"} the team')
+
         if not self.pending_turns[ActionType.TEAM_APPROVAL]:
             self.conclude_team_approval_results()
 
@@ -185,6 +202,8 @@ class AvalonGame:
         response = override_choice
         if not response:
             response = player.success_or_fail()
+
+        print(f'{player} {"Passed" if response else "Failed"} the quest')
 
         if response is False:
             # Mission failed
@@ -210,7 +229,7 @@ class AvalonGame:
         self.initialize_team_selection_round()
 
     def initialize_team_selection_round(self):
-        self.current_team = None
+        self.current_team = []
         self.current_proposal_number = 0
         self.current_action_type = ActionType.TEAM_SELECTION
         self.pending_turns[ActionType.QUEST_VOTE] = self.generate_team_selection_turns()
@@ -233,15 +252,15 @@ class AvalonGame:
         return [self.players[pid] for pid in player_ids]
 
 
-game = AvalonGame(5)
-agent = game.players[0]
-feedback = game.run()
-
-while feedback != True:
-    if feedback == ActionType.TEAM_SELECTION:
-        game.make_team_selection_move(agent)
-    elif feedback == ActionType.TEAM_APPROVAL:
-        game.make_team_approval_move(agent, True)
-    elif feedback == ActionType.QUEST_VOTE:
-        game.make_quest_vote_move(agent)
-    feedback = game.run()
+# game = AvalonGame(5)
+# agent = game.players[0]
+# feedback = game.run()
+#
+# while feedback != True:
+#     if feedback == ActionType.TEAM_SELECTION:
+#         game.make_team_selection_move(agent)
+#     elif feedback == ActionType.TEAM_APPROVAL:
+#         game.make_team_approval_move(agent, True)
+#     elif feedback == ActionType.QUEST_VOTE:
+#         game.make_quest_vote_move(agent)
+#     feedback = game.run()
