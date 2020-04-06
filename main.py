@@ -6,7 +6,7 @@ def sample_run():
     env = AvalonEnv(5)
 
     # Initial
-    obs, feedback = env.reset()
+    obs = env.reset()
     action_space = env.action_space
     agent = RandomAgent()
     done = False
@@ -21,5 +21,5 @@ def sample_run():
         obs, rewards, done, info = env.step(action)
         env.render()
 
-
 sample_run()
+

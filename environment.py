@@ -2,7 +2,8 @@ import gym
 
 from gym.spaces import Tuple, Discrete
 
-from game_short import AvalonGame, ActionType
+from game.enums import ActionType
+from game.avalon import AvalonGame
 
 """
 Game state space = Info necessary to make a decision, which includes:
@@ -27,6 +28,8 @@ Tuple of discrete action spaces: https://github.com/openai/gym/blob/master/gym/e
 Multi discrete action space discussion: https://github.com/openai/universe-starter-agent/issues/75
 Check if we can wrap GoalEnv instead https://github.com/openai/gym/blob/master/gym/core.py#L158
 Blackjack https://github.com/openai/gym/blob/master/gym/envs/toy_text/blackjack.py
+
+0-4
 """
 
 
@@ -60,59 +63,99 @@ class AvalonEnv(gym.Env):
                 Discrete(3),  # Approve / Reject / No op
             ]
         )
+
         self.observation_space = Tuple((
             Discrete(self.num_players),  # Character types
             Discrete(1),  # Quest
             Discrete(1),  # Proposal
             Discrete(1),  # Leader
+            Discrete(self.num_players),  # Current team
         ))
 
     def _initialize_game(self, num_players):
         self.game = AvalonGame(num_players)
         self.player_types = [p.char_type.value for p in self.game.players]
         self.agent = list(filter(lambda x: x.player_id == 0, self.game.players))[0]
+        self.quests_history = []
+        self.quest_reward_count = 0
+
+    def _convert_game_feedback_to_observation(self, feedback):
+        return [
+            self.player_types,
+            feedback.quest_number,
+            feedback.proposal_number,
+            feedback.leader
+        ]
 
     def step(self, action):
         assert self.action_space.contains(action)
         self._take_action(action)
-        obs, feedback = self._next_observation()
-        reward = self.compute_reward(obs, action)
-        done = feedback is True
-        info = {'next_action': feedback}
+        feedback = self._get_agent_feedback()
+        obs = self._convert_game_feedback_to_observation(feedback)
+        reward = self.compute_reward(feedback, action)
+        done = feedback.game_winner is not None
+        info = {'next_action': feedback.action_type}
         return obs, reward, done, info
 
-    def compute_reward(self, obs, action):
+    def compute_reward(self, feedback, action):
         """
         Compute reward for the action taken.
+
+        Ideas:
+        - Penalize for illegal actions?
+        - Mission loose results in -ve reward
+        - Mission win results in +ve reward
+        - Game win / loose rewards
         """
-        return 0
+        reward = 0
+
+        if self.quest_reward_count < len(self.quests_history):
+            last_quest = self.quests_history[-1]
+            if last_quest.quest_winner == self.agent.team:
+                reward += 1
+            else:
+                reward -= 1
+            self.quest_reward_count += 1
+
+        if feedback.game_winner is not None:
+            if feedback.game_winner == self.agent.team:
+                reward += 1
+            else:
+                reward -= 1
+
+        return reward
 
     def reset(self):
         # Reset all the stuff
         self._initialize_game(self.num_players)
-        return self._next_observation()
+        feedback = self._get_agent_feedback()
+        return self._convert_game_feedback_to_observation(feedback)
 
     def render(self, mode='human'):
         print(self.game)
 
-    def _next_observation(self):
-        feedback = None
-        while feedback is None:
+    def _get_agent_feedback(self):
+        while True:
             feedback = self.game.run()
             self.render()
-        obs = [self.player_types, self.game.current_quest, self.game.current_proposal_number, self.game.current_leader]
-        return obs, feedback
+            if feedback.action_required or feedback.game_winner:
+                return feedback
+            if feedback.initiate_new_quest:
+                assert feedback.quest_winner
+                self.quests_history.append(self.game.current_quest)
+                self.game.initialize_new_quest()
 
     def _take_action(self, action):
-        action_to_value = self.action_value_map[self.game.current_action_type]
-        if self.game.current_action_type == ActionType.TEAM_SELECTION:
+        action_type = self.game.current_quest.current_action_type
+        action_to_value = self.action_value_map[action_type]
+        if action_type == ActionType.TEAM_SELECTION:
             # Choose team randomly for now
-            self.game.make_team_selection_move(self.agent)
-        elif self.game.current_action_type == ActionType.TEAM_APPROVAL:
+            self.game.run(self.agent, override_choice=None)
+        elif action_type == ActionType.TEAM_APPROVAL:
             relevant_action = action[1]
             action_to_take = action_to_value[relevant_action]
-            self.game.make_team_approval_move(self.agent, override_choice=action_to_take)
-        elif self.game.current_action_type == ActionType.QUEST_VOTE:
+            self.game.run(self.agent, override_choice=action_to_take)
+        elif action_type == ActionType.QUEST_VOTE:
             relevant_action = action[2]
             action_to_take = action_to_value[relevant_action]
-            self.game.make_quest_vote_move(self.agent, override_choice=action_to_take)
+            self.game.run(self.agent, override_choice=action_to_take)
