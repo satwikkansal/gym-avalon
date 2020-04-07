@@ -3,6 +3,9 @@ from agent import RandomAgent
 
 
 def sample_run():
+    """
+    Runs a single episode of the game.
+    """
     env = AvalonEnv(5)
 
     # Initial

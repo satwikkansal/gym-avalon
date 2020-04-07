@@ -35,7 +35,7 @@ class Player:
         :return: True or False depending on the decision taken based on the heuristics.
         """
         approve_self_bias = 0.8
-        evil_approve_bias = 0.9
+        evil_approve_bias = 0.8
 
         # Irrespective of the team
         if self in quest.current_team:
@@ -66,7 +66,7 @@ class Player:
         :return:  True or False depending on the decision taken based on the heuristics.
         """
         p = 1.0
-        evil_mission_fail_prob = 0.8
+        evil_mission_fail_prob = 0.5
         if self.team is Team.EVIL:
            p = 1 - evil_mission_fail_prob
 
@@ -94,12 +94,17 @@ class Player:
                 if player.team is Team.EVIL:
                     weights[pid] = 20
 
-        weights[self.player_id] = 20
+        if self.team is Team.GOOD:
+            weights[self.player_id] = 80
+
         player_ids = self.weighted_exclusive_choice(options, quest.num_players, weights)
         return [quest.quest_players[pid] for pid in player_ids]
 
     @staticmethod
     def weighted_exclusive_choice(options, num_picks, weights):
+        """
+        Make exclusive num_choices based on the weights provided.
+        """
         weights_sum = sum(weights)
         if weights_sum != 1.0:
             # Normalize the weights
@@ -108,9 +113,13 @@ class Player:
 
     @staticmethod
     def decide_with_probability(p):
+        """
+        Bernoulli's distribution
+        """
         return np.random.binomial(1, p) == 1
 
     def is_agent(self):
+        # For now, player with ID 0 is the agent.
         return self.player_id == 0
 
     @staticmethod

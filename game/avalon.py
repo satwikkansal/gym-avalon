@@ -1,3 +1,8 @@
+"""
+This is the module that pieces together various components of the game (Quests, Players)
+and serves as an interface to take actions in the game.
+"""
+
 from collections import namedtuple
 
 import random
@@ -22,6 +27,12 @@ game_player_configs = {
 
 
 class GameFeedback:
+    """
+    The glue between environment and the game. The AvalonGame.run function
+    returns a GameFeedback object.
+
+    It's a plain object with no funcitons.
+    """
     def __init__(self, game, action_required=False, initiate_new_quest=False):
         quest = game.current_quest
         self.action_type = quest.current_action_type
@@ -36,10 +47,15 @@ class GameFeedback:
 
 
 class AvalonGame:
-    def __init__(self, num_players, max_quests=5, max_proposals_allowed=5, enable_agent=False):
+    """
+    The main game class.
+    """
+    def __init__(self, num_players, max_quests=5, max_proposals_allowed=5):
+        """
+        Setting up logic for the game goes here. Number of players are configurable.
+        """
         self.num_players = num_players
         self.players = self.initialize_players()
-        self.enable_agent = enable_agent  # for now, agent is always player 0
 
         self.max_quests = max_quests
         self.max_proposals_allowed = max_proposals_allowed
@@ -57,6 +73,9 @@ class AvalonGame:
         self.winner = None
 
     def initialize_new_quest(self):
+        """
+        This function should be called before starting any new quest in the game.
+        """
         quest_num = 0
         leader = 0
         if self.current_quest is not None:
@@ -70,6 +89,9 @@ class AvalonGame:
         self.current_player = self.current_quest.current_leader
 
     def __str__(self):
+        """
+        Method for displaying nice print(game) summaries.
+        """
         string = f"""
         =======================
         Wins: Good {self.good_team_wins} / Evil {self.evil_team_wins}
@@ -79,8 +101,7 @@ class AvalonGame:
 
     def initialize_players(self):
         """
-        Assigns player types based on the number of players and game_player_config.s
-        :return:
+        Assigns player types based on the number of players and game_player_configs.
         """
         # Random sampling for random assignment of character types
         player_order = random.sample(range(self.num_players), self.num_players)
@@ -101,6 +122,14 @@ class AvalonGame:
         return players
 
     def run(self, agent_player=None, override_choice=None):
+        """
+        The driving logic of the game.
+
+        The game step runs on its own unless the current player is an agent.
+        In that case the run method will return a feedback indicating a desired action,
+        and the next step is to call the run method again by passing `agent_player` and
+        `override_choice` arguments.
+        """
         quest = self.current_quest
 
         if agent_player:
