@@ -31,7 +31,7 @@ class GameFeedback:
     The glue between environment and the game. The AvalonGame.run function
     returns a GameFeedback object.
 
-    It's a plain object with no funcitons.
+    It's a plain object with no functions.
     """
     def __init__(self, game, action_required=False, initiate_new_quest=False):
         quest = game.current_quest
@@ -44,6 +44,10 @@ class GameFeedback:
         self.leader = quest.current_leader
         self.evil_wins = game.evil_team_wins
         self.initiate_new_quest = initiate_new_quest
+
+        self.current_team = [0] * game.num_players
+        for player in quest.current_team:
+            self.current_team[player.player_id] = 1
 
 
 class AvalonGame:

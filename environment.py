@@ -84,7 +84,8 @@ class AvalonEnv(gym.Env):
             self.player_types,
             feedback.quest_number,
             feedback.proposal_number,
-            feedback.leader
+            feedback.leader,
+            feedback.current_team
         ]
 
     def step(self, action):
