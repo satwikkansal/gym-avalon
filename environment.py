@@ -89,8 +89,8 @@ class AvalonEnv(gym.Env):
 
     def step(self, action):
         assert self.action_space.contains(action)
-        self._take_action(action)
-        feedback = self._get_agent_feedback()
+        agent_action_feedback = self._take_action(action)
+        feedback = self._get_agent_feedback(agent_action_feedback)
         obs = self._convert_game_feedback_to_observation(feedback)
         reward = self.compute_reward(feedback, action)
         done = feedback.game_winner is not None
@@ -134,28 +134,30 @@ class AvalonEnv(gym.Env):
     def render(self, mode='human'):
         print(self.game)
 
-    def _get_agent_feedback(self):
-        while True:
-            feedback = self.game.run()
+    def _get_agent_feedback(self, prev_feedback=None):
+        feedback = prev_feedback if prev_feedback is not None else self.game.run()
+        while not(feedback.action_required or feedback.game_winner):
             self.render()
-            if feedback.action_required or feedback.game_winner:
-                return feedback
             if feedback.initiate_new_quest:
                 assert feedback.quest_winner
                 self.quests_history.append(self.game.current_quest)
                 self.game.initialize_new_quest()
+            feedback = self.game.run()
+        return feedback
 
     def _take_action(self, action):
         action_type = self.game.current_quest.current_action_type
         action_to_value = self.action_value_map[action_type]
         if action_type == ActionType.TEAM_SELECTION:
             # Choose team randomly for now
-            self.game.run(self.agent, override_choice=None)
+            feedback = self.game.run(self.agent, override_choice=None)
         elif action_type == ActionType.TEAM_APPROVAL:
             relevant_action = action[1]
             action_to_take = action_to_value[relevant_action]
-            self.game.run(self.agent, override_choice=action_to_take)
+            feedback = self.game.run(self.agent, override_choice=action_to_take)
         elif action_type == ActionType.QUEST_VOTE:
             relevant_action = action[2]
             action_to_take = action_to_value[relevant_action]
-            self.game.run(self.agent, override_choice=action_to_take)
+            feedback = self.game.run(self.agent, override_choice=action_to_take)
+
+        return feedback
