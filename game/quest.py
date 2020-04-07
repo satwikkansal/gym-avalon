@@ -78,7 +78,7 @@ class Quest:
     def make_team_approval_move(self, player, override_choice=None):
         response = override_choice
         if not response:
-            response = player.approve_or_reject_quest_team()
+            response = player.approve_or_reject_quest_team(self)
         self.approvals += response
 
         print(f'{player} {"Approved" if response else "Rejected"} the team')
@@ -95,22 +95,28 @@ class Quest:
 
         if response is False:
             # Mission failed
+            print(f'Mission Failed due to {player}')
             return self.conclude_quest(False)
 
         if not self.pending_turns[ActionType.QUEST_VOTE]:
             # Mission succeeded
+            print(f'Mission Succeeded!')
             return self.conclude_quest(True)
 
     def conclude_team_approval_results(self):
         approved = 2 * self.approvals > self.num_players
         if approved:
+            print("Current team is approved!")
             self.initialize_quest_vote_round()
         else:
+            print("Team approval failed")
             self.initialize_team_selection_round()
 
     def conclude_quest(self, success):
         if success:
+            print("Good team won the quest!")
             self.quest_winner = Team.GOOD
         else:
+            print("Evil team won the quest!")
             self.quest_winner = Team.EVIL
         return self.quest_winner
