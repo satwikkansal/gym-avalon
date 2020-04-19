@@ -1,17 +1,14 @@
 from environment import AvalonEnv
-from agent import RandomAgent
+from agent import QTableAgent, RandomAgent
 
 
-def sample_run():
+def sample_run(env, agent):
     """
     Runs a single episode of the game.
     """
-    env = AvalonEnv(5)
 
     # Initial
     obs = env.reset()
-    action_space = env.action_space
-    agent = RandomAgent()
     done = False
     info = {}
     rewards = None
@@ -20,9 +17,12 @@ def sample_run():
         print("Reward", rewards)
         print("Done status", done)
         print("Info", info)
-        action = agent.get_next_action(obs, rewards, info, action_space)
+        action = agent.get_next_action(obs, rewards, info)
         obs, rewards, done, info = env.step(action)
         env.render()
 
-sample_run()
 
+if __name__ == "__main__":
+    env = AvalonEnv(5, True)
+    agent = QTableAgent(env=env)
+    sample_run(env, agent)
