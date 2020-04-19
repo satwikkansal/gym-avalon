@@ -50,11 +50,13 @@ class AvalonEnv(gym.Env):
         }
     }
 
-    def __init__(self, num_players):
+    def __init__(self, num_players, enable_logs, autoplay=False):
         super(AvalonEnv, self).__init__()
+        self.enable_logs = enable_logs
+        self.autoplay = autoplay
 
         self.num_players = num_players
-        self._initialize_game(num_players)
+        self._initialize_game(num_players, enable_logs)
 
         self.action_space = self.action_space = Tuple(
             [
@@ -65,6 +67,7 @@ class AvalonEnv(gym.Env):
         )
 
         self.observation_space = Tuple((
+            #TODO: Mask character types for good players later
             Discrete(self.num_players),  # Character types
             Discrete(1),  # Quest
             Discrete(1),  # Proposal
@@ -72,21 +75,21 @@ class AvalonEnv(gym.Env):
             Discrete(self.num_players),  # Current team
         ))
 
-    def _initialize_game(self, num_players):
-        self.game = AvalonGame(num_players)
-        self.player_types = [p.char_type.value for p in self.game.players]
+    def _initialize_game(self, num_players, enable_logs):
+        self.game = AvalonGame(num_players, enable_logs=enable_logs)
+        self.player_types = tuple(p.char_type.value for p in self.game.players)
         self.agent = list(filter(lambda x: x.player_id == 0, self.game.players))[0] # Agent is the player with ID 0
-        self.quests_history = [] # Useful for computing the reward
+        self.quests_history = []  # Useful for computing the reward
         self.quest_reward_count = 0
 
     def _convert_game_feedback_to_observation(self, feedback):
-        return [
+        return (
             self.player_types,
             feedback.quest_number,
             feedback.proposal_number,
             feedback.leader,
             feedback.current_team
-        ]
+        )
 
     def step(self, action):
         """
@@ -101,7 +104,7 @@ class AvalonEnv(gym.Env):
         obs = self._convert_game_feedback_to_observation(feedback)
         reward = self.compute_reward(feedback, action, action_type)
         done = feedback.game_winner is not None
-        info = {'next_action': feedback.action_type}
+        info = {'next_action': feedback.action_type, 'char_type': self.agent.char_type, 'prev_action': action}
         return obs, reward, done, info
 
     def compute_reward(self, feedback, action, action_type):
@@ -133,17 +136,17 @@ class AvalonEnv(gym.Env):
                 reward -= 1
 
         # TODO: Add logic for action penalizing here.
-
         return reward
 
     def reset(self):
         # Reset all the stuff
-        self._initialize_game(self.num_players)
+        self._initialize_game(self.num_players, self.enable_logs)
         feedback = self._get_agent_feedback()
         return self._convert_game_feedback_to_observation(feedback)
 
     def render(self, mode='human'):
-        print(self.game)
+        if self.enable_logs:
+            print(self.game)
 
     def _get_agent_feedback(self, prev_feedback=None):
         """
@@ -171,10 +174,18 @@ class AvalonEnv(gym.Env):
             feedback = self.game.run(self.agent, override_choice=None)
         elif action_type == ActionType.TEAM_APPROVAL:
             relevant_action = action[1]
-            action_to_take = action_to_value[relevant_action]
+
+            if self.autoplay:
+                action_to_take = None
+            else:
+                action_to_take = action_to_value[relevant_action]
             feedback = self.game.run(self.agent, override_choice=action_to_take)
         elif action_type == ActionType.QUEST_VOTE:
             relevant_action = action[2]
-            action_to_take = action_to_value[relevant_action]
+            if self.autoplay:
+                action_to_take = None
+            else:
+                action_to_take = action_to_value[relevant_action]
             feedback = self.game.run(self.agent, override_choice=action_to_take)
+
         return feedback
