@@ -146,6 +146,9 @@ class Quest:
 
         self.mission_fails += response==False
 
+        # The following comments are for the Previous version where a single
+        # fail was enough to sabotage the mission.
+
         # if response is False:
         #     # Mission failed
         #     if self.enable_logs: print(f'Mission Failed due to {player}')
@@ -157,6 +160,8 @@ class Quest:
             return self.conclude_quest_majority()
 
     """
+    Previous version method of concluding quest where a single 
+    fail was enough to sabotage the mission.
     def conclude_quest(self, success):
         if success:
             if self.enable_logs: print("Good team won the quest!")
@@ -168,7 +173,7 @@ class Quest:
     """
 
     def conclude_quest_majority(self):
-        # If more than half people fail mission, then only it's a fail
+        # If half or more team members fail mission, then only it's a fail
         success = 2 * self.mission_fails < self.team_size
         if success:
             if self.enable_logs: print("Good team won the quest!")
@@ -182,5 +187,8 @@ class Quest:
         return self.quest_winner
 
     def _update_player_histories(self):
+        """
+        To keep track of the history of passed or failed mission for a player.
+        """
         for player in self.current_team:
             player.mission_history.append(self.quest_winner is Team.GOOD)

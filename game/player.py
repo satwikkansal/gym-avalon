@@ -55,14 +55,16 @@ class Player:
         majority_size = (quest.team_size + 1) // 2
 
         if self.team is Team.EVIL:
-            p = 0.0
             evils_in_team = 0
             for player in quest.current_team:
                 if player.team is Team.EVIL:
                     evils_in_team += 1
             if evils_in_team >= majority_size:
+                # If evils know they're in majority, they'll approve
+                # with some bluff factor.
                 p = evil_approve_bias
             else:
+                # Else they'll reject with some bluff factor
                 p = (1 - evil_approve_bias)
 
         if self.team is Team.GOOD:
@@ -72,9 +74,12 @@ class Player:
                 p = good_approve_bias
 
             for player in quest.current_team:
+                # If the  player is know to be a part of failed mission
+                # decrease the likelihood of team approval.
                 if False in player.mission_history:
                     p -= suspicion_factor
 
+            # Add lower bound
             p = max([suspicion_factor, p])
 
         return self.decide_with_probability(p)
@@ -120,7 +125,7 @@ class Player:
         if self.team is Team.EVIL:
             for pid, player in enumerate(quest.quest_players):
                 if player.team is Team.EVIL:
-                    weights[pid] += 200 # More weight to evil players
+                    weights[pid] += 300  # More weight to evil players
 
         if self.team is Team.GOOD:
             for pid, player in enumerate(quest.quest_players):
@@ -129,7 +134,7 @@ class Player:
                     if mission_success:
                         weights[pid] += 50
                     else:
-                        weights[pid] -= 50
+                        weights[pid] -= 75
 
             weights[self.player_id] = 500
 
