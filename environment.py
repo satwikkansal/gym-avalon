@@ -12,15 +12,17 @@ It is the Info necessary to make a decision, which includes:
 
 - Personal character type
 - Other player character type (in case personal type is evil)
+- Previous quests status and previous proposals (most probably at the player level)
+
+These three factors are combined into PlayerVisibility. Other factors include,
 - Current quest number
 - Current team proposal number in current quest
-- Previous quests status and previous proposals (most probably at the player level)
 
 
 Actions space
 -------------
 Three kinds of actions: Team Selection, Team Approval and Quest voting
-[Select Team/No-op, Approve/reject/No-op, Pass/Fail/No-op]
+[Select Team, No-Op/Approve/reject, No-Op/Pass/Fail]
 
 
 References
@@ -37,6 +39,12 @@ class AvalonEnv(gym.Env):
     metadata = {'render.modes': ['human']}
 
     def __init__(self, num_players, enable_logs, autoplay=False):
+        """
+        :param num_players: Number of players to set up the game for. Passed as an arg to game initialization.
+        :param enable_logs: Pass enable_logs as True to debug and see step by step game state changes.
+        :param autoplay: When autoplay is true, all the agent actions are nullified and the game is played automatically as per heuristics
+                         present in the Player class.
+        """
         super(AvalonEnv, self).__init__()
         self.enable_logs = enable_logs
         self.autoplay = autoplay
@@ -47,14 +55,14 @@ class AvalonEnv(gym.Env):
         # See action_value_map for the behavior of various action values
         self.action_space = Tuple(
             [
-                MultiBinary(self.num_players),
+                MultiBinary(self.num_players),  # Select players
                 Discrete(3),  # No op/ Approve / Reject
                 Discrete(3),  # No op / Pass / Fail
             ]
         )
 
         self.observation_space = Tuple((
-            Discrete(len(PlayerVisibility)),  # Known character types and current team information
+            Discrete(len(PlayerVisibility)),  # Explained in the top comments
             Discrete(len(ActionType)),  # Action type
             Discrete(1),  # Quest
             Discrete(1),  # Proposal
@@ -64,23 +72,34 @@ class AvalonEnv(gym.Env):
     def _initialize_game(self, num_players, enable_logs):
         self.game = AvalonGame(num_players, enable_logs=enable_logs)
         self.player_types = tuple(p.char_type.value for p in self.game.players)
-        self.agent = list(filter(lambda x: x.player_id == 0, self.game.players))[0] # Agent is the player with ID 0
-        self.quests_history = []  # Useful for computing the reward
+        self.agent = list(filter(lambda x: x.player_id == 0, self.game.players))[0]  # Agent is the player with ID 0
+        # Useful for computing the reward for winning / losing a quest
+        self.quests_history = []
         self.quest_reward_count = 0
 
     def _convert_game_feedback_to_observation(self, feedback, prev_action):
+        """
+        The method that creates the observation and info object for the environment.
+        It uses feedback received from the game to do so.
+        """
         visibilities = []
 
         for player in self.game.players:
+            # Is the player in current team?
             in_team = player in feedback.current_team
             total_missions = len(player.mission_history)
+            # How many passed and failed missions is the player part of?
             passed_missions = sum(player.mission_history)
             failed_missions = total_missions - passed_missions
             if self.agent.team is Team.EVIL:
+                # Evil agent has full visibility about the player's team
                 visibilities.append(PlayerVisibility[(player.team, in_team, passed_missions, failed_missions)])
             else:
+                # Good agent has no visibility about the player's team
                 visibilities.append(PlayerVisibility[(Team.UNKNOWN, in_team, passed_missions, failed_missions)])
 
+        # Pack into an observation
+        # Note this structure should conform to the one defined in self.observation_space
         obs = (
             tuple(visibilities),
             feedback.action_type.value,
@@ -89,6 +108,9 @@ class AvalonEnv(gym.Env):
             feedback.leader,
         )
 
+        # Extra Info that needs to be passed to agent to decide stuff.
+        # This info is however not a part of state space, so will only be helpful
+        # in making immediate decisions.
         info = {
             'next_action': feedback.action_type,
             'char_type': self.agent.char_type,
@@ -116,12 +138,12 @@ class AvalonEnv(gym.Env):
 
         return obs, reward, done, info
 
-    def compute_reward(self, feedback, action, current_action_type):
+    def compute_reward(self, feedback, action, action_type):
         """
         Compute reward for the action taken.
 
         Ideas:
-        - Penalize for illegal actions?
+        - Penalize for illegal actions
         - Mission loose results in -ve reward
         - Mission win results in +ve reward
         - Game win / loose rewards
@@ -144,12 +166,12 @@ class AvalonEnv(gym.Env):
             else:
                 reward -= 1
 
-        for action_type in ActionType:
-            if action_type ==  ActionType.TEAM_SELECTION:
+        for at in ActionType:
+            if at == ActionType.TEAM_SELECTION:
                 # Team selection is always sampled in current scenario
                 continue
-            # Invalid action supplied the agent
-            if action_type != current_action_type and action[action_type.value]:
+            # Invalid action supplied by agent instead of a No-OP (0 value)
+            if at != action_type and action[at.value]:
                 reward -= 0.5
             else:
                 reward += 0.1
@@ -182,6 +204,10 @@ class AvalonEnv(gym.Env):
         return feedback
 
     def _get_relevant_value_for_action(self, action, action_type):
+        """
+        A method that translates the action conforming to self.action_space
+        to a corresponding value that can be passed to the game.
+        """
         action_value_map = {
             ActionType.TEAM_SELECTION: None,  # The vector value should
             ActionType.TEAM_APPROVAL: {
