@@ -1,9 +1,10 @@
 from collections import deque, defaultdict
+from flatten_dict import flatten
 import numpy as np
 
 from environment import AvalonEnv
 from agent import RandomAgent, QTableAgent
-from game.enums import CharacterType
+from game.enums import CharacterType, PlayerVisibility
 
 
 def train(num_episodes, env, agent, last_n_plot=50):
@@ -16,13 +17,9 @@ def train(num_episodes, env, agent, last_n_plot=50):
     agent_game_results = defaultdict(list)
 
     for _ in range(num_episodes):
-        obs = env.reset()
+        obs, info = env.reset()
+        info['prev_obs'] = None
         reward = 0
-        info = {
-            'char_type': env.agent.char_type,
-            'prev_obs': obs,
-            'prev_action': None
-        }
         done = False
 
         episode_reward = 0
@@ -61,10 +58,10 @@ def print_summary(agent_game_results):
         print(f'Agent won {win_percent}% games out of {total_games} games while taking {char_type.name} role.')
 
 
-env = AvalonEnv(5, enable_logs=False, autoplay=False)
-agent = QTableAgent(env=env)
-num_episodes = 20000
-rewards, penalties, agent_game_results = train(num_episodes, env, agent)
-servant_table = agent.q_table[CharacterType.SERVANT]
-print_summary(agent_game_results)
+env = AvalonEnv(6, enable_logs=False, autoplay=False)
 
+agent = QTableAgent(env=env)
+num_episodes = 500
+rewards, penalties, agent_game_results = train(num_episodes, env, agent)
+servant_table = sorted(flatten(agent.q_table[CharacterType.SERVANT]).items(), key=lambda x: x[1])
+print_summary(agent_game_results)
