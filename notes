@@ -1,0 +1,143 @@
+Strategies for good guys depend on,
+-----------------------------------
+
+1. Special roles: https://www.quora.com/What-are-some-rookie-mistakes-in-the-Avalon-game
+2. Conversations to figure out who exactly is evil
+3. Careful analysis of the game history
+
+
+The biggest challenge for the good team is to prevent evil team member from entering a team, and getting approved.
+
+The data that I'll need to figure out who's evil:
+
+Player 1:
+    History:
+        Previous mission status: [P F P]
+
+Intuition:
+
+- (P increases the prob, F decreases the prob) of team selection
+- (P increases the prob, F decreases the prob) of team approval
+
+
+
+Order in which to try things
+----------------------------
+- Make the evil metrics stricter. [Done]
+- Improve the state space
+    - Add player visibility [Done]
+    - Merge quest history into visibility [Done]
+- Add team selection action capability for the agent. (Also take care of the team size attribute) [Done]
+- Add action_type information to the state space? [Done]
+- Add penalty for non-legal-actions [Done]
+- Make it work with the baseline models. Try algorithms like Wolpertinger.
+
+
+
+
+Ideas
+-----
+
+- Mask char types for good agent? [Done]
+- Fix the number of players in a quest round? [Not required, the game works fine otherwise)
+- Action-type specific q-table *
+- Other techniques
+
+
+------------------------
+So far what we've done is,
+-------------------------
+
+Environment side
+----------------
+- Set up the game simulation with heuristics.
+- These heuristics are porbabalistic in nature giving rise to a stochastic MDP.
+- We've simplified the game as follows,
+    - No special roles. Only servants and minions.
+    - Single evil player cannot sabotage the mission (requires majority voting)
+
+
+Agent side
+----------
+- The task of the agent should be to outperform the random agent.
+- There are three kinds of action agent has to take,
+
+1. Team selection,
+
+For this agent needs to know game history for every player. This is trickiest part to model since it increases the state-space
+exponentially.
+Hint: Maybe experience replay can help here (but not too sure)
+
+For evil side player, the task is easier since he's already familiar with the character types, and just need to make sure if
+there are enough players on the team to sabotage the mission.
+
+Possible number of actions: 5-Choose-2 for a 5-2 game.
+
+2. Approval of a team,
+
+This is closely linked with the previous action. Basically, same information needed to decide whether to approve the team or not.
+
+
+3. Pass or fail the mission
+
+An evil agent has some bluff factor involved here, but a good agent should learn to always pass the quiz. The only extra information that
+might be useful in deciding this is the current round of the game. Agent should learn to ignore rest of the information.
+
+
+Given the above info, the state space should consist of following information,
+------------------------------------------------------------------------------
+- Who is what (character types)
+    + total combinations = num_players * num_roles = 5 * 2
+- Current team (useful for all actions expect team selection)
+    + total combinations = 5-choose-2 or 5-choose-3 = 10
+- History information like,
+    + Previous quest results of the player.
+      Basically represented by two values; number of success quests, and number of fail quests.
+      total combos= less than 5 * 5 since all the combos where some exceeds 5 are invalid like
+      4, 2; 4,3; 4,4; 1, 4; 2, 4; 3, 4; 3, 3; i.e. 18 combos * 5 players = 90 combos.
+
+Above three can be reduced in size if combined into player visibility (see Player Visibilites below)
+
+- Current quest number as strategy might change during different rounds. This will need,
+    + total_combinations = round_number = 5
+
+- Other minor information like,
+    + current proposal round (5 possible values)
+    + current leader i.e. the person who picked the team (5 possible values)
+
+
+Player visibilities,
+-------------------
+A single number that accounts for:
+
+- Is part of the current team
+- Team; can take three values; Good, Evil, Unknown
+- History (number of failed and passed quests the player was part of)
+
+=> 2 * 3 * 18 => 108 states overall.
+
+
+
+Some maths
+----------
+
+Typically, for table-based q-learning, Minimum episodes to train on = 2 x state space size.
+
+Rough estimate State space size = essential * (non-essential) = (108 ^ 5) * 5 * (5 * 5)  ~= 10^14 i.e. in billions
+
+Note: This will also include a lot of states which aren't possible because of the game rules and dynamics.
+
+Clearly exhaustive learning isn't possible with tabular q-learning, but it's worth to see some improvement using
+q-learning. (some states might be quite rare some might be too frequent where q-learning can show it's effect)
+
+
+Observations to take,
+---------------------
+Good agent is more interesting from learning perspective.
+
+- Is the good agent learning to always pass the mission?
+- Does the agent learn to not make the no-op action?
+- Inspect the Q-table to get more insights (especially the most +ve and most -ve states)
+
+
+
