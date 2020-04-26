@@ -1,8 +1,8 @@
 import gym
 
-from gym.spaces import Tuple, Discrete
+from gym.spaces import Tuple, Discrete, MultiBinary
 
-from game.enums import ActionType
+from game.enums import ActionType, PlayerVisibility, Team
 from game.avalon import AvalonGame
 
 """
@@ -36,20 +36,6 @@ Blackjack https://github.com/openai/gym/blob/master/gym/envs/toy_text/blackjack.
 class AvalonEnv(gym.Env):
     metadata = {'render.modes': ['human']}
 
-    action_value_map = {
-        ActionType.TEAM_SELECTION: {},
-        ActionType.TEAM_APPROVAL: {
-            0: True,
-            1: False,
-            2: None
-        },
-        ActionType.QUEST_VOTE: {
-            0: True,
-            1: False,
-            2: None
-        }
-    }
-
     def __init__(self, num_players, enable_logs, autoplay=False):
         super(AvalonEnv, self).__init__()
         self.enable_logs = enable_logs
@@ -58,21 +44,21 @@ class AvalonEnv(gym.Env):
         self.num_players = num_players
         self._initialize_game(num_players, enable_logs)
 
-        self.action_space = self.action_space = Tuple(
+        # See action_value_map for the behavior of various action values
+        self.action_space = Tuple(
             [
-                Discrete(2),  # Randomly select team / No op
-                Discrete(3),  # Pass / Fail / No op
-                Discrete(3),  # Approve / Reject / No op
+                MultiBinary(self.num_players),
+                Discrete(3),  # No op/ Approve / Reject
+                Discrete(3),  # No op / Pass / Fail
             ]
         )
 
         self.observation_space = Tuple((
-            #TODO: Mask character types for good players later
-            Discrete(self.num_players),  # Character types
+            Discrete(len(PlayerVisibility)),  # Known character types and current team information
+            Discrete(len(ActionType)),  # Action type
             Discrete(1),  # Quest
             Discrete(1),  # Proposal
             Discrete(1),  # Leader
-            Discrete(self.num_players),  # Current team
         ))
 
     def _initialize_game(self, num_players, enable_logs):
@@ -82,14 +68,36 @@ class AvalonEnv(gym.Env):
         self.quests_history = []  # Useful for computing the reward
         self.quest_reward_count = 0
 
-    def _convert_game_feedback_to_observation(self, feedback):
-        return (
-            self.player_types,
+    def _convert_game_feedback_to_observation(self, feedback, prev_action):
+        visibilities = []
+
+        for player in self.game.players:
+            in_team = player in feedback.current_team
+            total_missions = len(player.mission_history)
+            passed_missions = sum(player.mission_history)
+            failed_missions = total_missions - passed_missions
+            if self.agent.team is Team.EVIL:
+                visibilities.append(PlayerVisibility[(player.team, in_team, passed_missions, failed_missions)])
+            else:
+                visibilities.append(PlayerVisibility[(Team.UNKNOWN, in_team, passed_missions, failed_missions)])
+
+        obs = (
+            tuple(visibilities),
+            feedback.action_type.value,
             feedback.quest_number,
             feedback.proposal_number,
             feedback.leader,
-            feedback.current_team
         )
+
+        info = {
+            'next_action': feedback.action_type,
+            'char_type': self.agent.char_type,
+            'prev_action': prev_action,
+            'num_players': self.game.num_players,
+            'quest_team_size': feedback.quest_team_size
+        }
+
+        return obs, info
 
     def step(self, action):
         """
@@ -97,17 +105,18 @@ class AvalonEnv(gym.Env):
         Note that after execution agent's actions, all other auto-actions (by non-agent players)
         are executed before computing the next observation and reward for the agent.
         """
-        assert self.action_space.contains(action)
+        # Disabling because tuple values aren't supported by contains in MultiBinary spcaes.
+        # assert self.action_space.contains(action)
         action_type = self.game.current_quest.current_action_type
         agent_action_feedback = self._take_action(action, action_type)
         feedback = self._get_agent_feedback(agent_action_feedback)
-        obs = self._convert_game_feedback_to_observation(feedback)
+        obs, info = self._convert_game_feedback_to_observation(feedback, action)
         reward = self.compute_reward(feedback, action, action_type)
         done = feedback.game_winner is not None
-        info = {'next_action': feedback.action_type, 'char_type': self.agent.char_type, 'prev_action': action}
+
         return obs, reward, done, info
 
-    def compute_reward(self, feedback, action, action_type):
+    def compute_reward(self, feedback, action, current_action_type):
         """
         Compute reward for the action taken.
 
@@ -123,9 +132,9 @@ class AvalonEnv(gym.Env):
         if self.quest_reward_count < len(self.quests_history):
             last_quest = self.quests_history[-1]
             if last_quest.quest_winner == self.agent.team:
-                reward += 1
+                reward += 2
             else:
-                reward -= 1
+                reward -= 2
             self.quest_reward_count += 1
 
         # Reward for winning / losing the game
@@ -135,14 +144,23 @@ class AvalonEnv(gym.Env):
             else:
                 reward -= 1
 
-        # TODO: Add logic for action penalizing here.
+        for action_type in ActionType:
+            if action_type ==  ActionType.TEAM_SELECTION:
+                # Team selection is always sampled in current scenario
+                continue
+            # Invalid action supplied the agent
+            if action_type != current_action_type and action[action_type.value]:
+                reward -= 0.5
+            else:
+                reward += 0.1
+
         return reward
 
     def reset(self):
         # Reset all the stuff
         self._initialize_game(self.num_players, self.enable_logs)
         feedback = self._get_agent_feedback()
-        return self._convert_game_feedback_to_observation(feedback)
+        return self._convert_game_feedback_to_observation(feedback, None)
 
     def render(self, mode='human'):
         if self.enable_logs:
@@ -163,29 +181,35 @@ class AvalonEnv(gym.Env):
             feedback = self.game.run()
         return feedback
 
+    def _get_relevant_value_for_action(self, action, action_type):
+        action_value_map = {
+            ActionType.TEAM_SELECTION: None,  # The vector value should
+            ActionType.TEAM_APPROVAL: {
+                0: None,
+                1: True,
+                2: False
+            },
+            ActionType.QUEST_VOTE: {
+                0: None,
+                1: True,
+                2: False
+            }
+        }
+
+        if action_type is ActionType.TEAM_SELECTION:
+            relevant_action = (action[action_type.value].nonzero())[0]
+        else:
+            relevant_action = action_value_map[action_type][action[action_type.value]]
+
+        return relevant_action
+
     def _take_action(self, action, action_type):
         """
         Take an action based on the action type and action
         vector provided by the agent. Return the feedback.
         """
-        action_to_value = self.action_value_map[action_type]
-        if action_type == ActionType.TEAM_SELECTION:
-            # Choose team randomly for now
-            feedback = self.game.run(self.agent, override_choice=None)
-        elif action_type == ActionType.TEAM_APPROVAL:
-            relevant_action = action[1]
+        relevant_action = None
+        if not self.autoplay:
+            relevant_action = self._get_relevant_value_for_action(action, action_type)
+        return self.game.run(self.agent, override_choice=relevant_action)
 
-            if self.autoplay:
-                action_to_take = None
-            else:
-                action_to_take = action_to_value[relevant_action]
-            feedback = self.game.run(self.agent, override_choice=action_to_take)
-        elif action_type == ActionType.QUEST_VOTE:
-            relevant_action = action[2]
-            if self.autoplay:
-                action_to_take = None
-            else:
-                action_to_take = action_to_value[relevant_action]
-            feedback = self.game.run(self.agent, override_choice=action_to_take)
-
-        return feedback

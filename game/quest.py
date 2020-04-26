@@ -3,7 +3,8 @@ from game.player import  Player
 
 
 class Quest:
-    def __init__(self, quest_num, team_size, players, leader):
+    def __init__(self, quest_num, team_size, players, leader, enable_logs):
+        self.enable_logs = enable_logs
         self.id = quest_num
         self.team_size = team_size
         self.quest_players = players
@@ -11,7 +12,8 @@ class Quest:
         self.current_leader = leader
         self.current_proposal_number = 0
         self.current_team = []
-        self.approvals = 0
+        self.quest_team_approvals = 0
+        self.mission_fails = 0
 
         # Info for keeping track of whose turn is next.
         self.current_action_type = ActionType.TEAM_SELECTION
@@ -32,7 +34,7 @@ class Quest:
         if self.current_action_type == ActionType.TEAM_APPROVAL:
             team_approval_info = f'''
             Current Proposal: {self.current_proposal_number}
-            Approvals so far: {self.approvals}
+            Approvals so far: {self.quest_team_approvals}
             '''
             quest_string += team_approval_info
 
@@ -56,7 +58,6 @@ class Quest:
         Method to initialize team selection round.
         """
         self.current_team = []
-        self.current_proposal_number = 0
         self.current_action_type = ActionType.TEAM_SELECTION
         self.pending_turns = dict()
         self.pending_turns[ActionType.TEAM_SELECTION] = self.generate_team_selection_turns()
@@ -65,7 +66,7 @@ class Quest:
         """
         Method to initialize team approval round.
         """
-        self.approvals = 0
+        self.quest_team_approvals = 0
         self.current_action_type = ActionType.TEAM_APPROVAL
         self.pending_turns = dict()
         self.pending_turns[ActionType.TEAM_APPROVAL] = self.quest_players[::]
@@ -76,7 +77,7 @@ class Quest:
         """
         self.current_action_type = ActionType.QUEST_VOTE
         self.pending_turns = dict()
-        self.pending_turns[ActionType.QUEST_VOTE] = self.current_team
+        self.pending_turns[ActionType.QUEST_VOTE] = self.current_team[:]
 
     def generate_team_selection_turns(self):
         """
@@ -94,11 +95,14 @@ class Quest:
         Team selection move with a provision for providing override by the agent.
         """
         if override_choice is not None:
-            self.current_team = override_choice
+            assert len(override_choice) == self.team_size
+            player_ids = override_choice
         else:
-            self.current_team = player.pick_quest_team(self)
+            player_ids = player.pick_quest_team(self)
 
-        print(f"{player} picked the team {Player.players_string(self.current_team)}")
+        self.current_team = [self.quest_players[pid] for pid in player_ids]
+
+        if self.enable_logs: print(f"{player} picked the team {Player.players_string(self.current_team)}")
 
         self.current_leader = (self.current_leader + 1) % self.num_players
         self.current_proposal_number += 1
@@ -111,9 +115,9 @@ class Quest:
         response = override_choice
         if not response:
             response = player.approve_or_reject_quest_team(self)
-        self.approvals += response
+        self.quest_team_approvals += response
 
-        print(f'{player} {"Approved" if response else "Rejected"} the team')
+        if self.enable_logs: print(f'{player} {"Approved" if response else "Rejected"} the team')
 
         if not self.pending_turns[ActionType.TEAM_APPROVAL]:
             self.conclude_team_approval_results()
@@ -122,12 +126,12 @@ class Quest:
         """
         Helper method to decide if the proposed team is approved or not.
         """
-        approved = 2 * self.approvals > self.num_players
+        approved = 2 * self.quest_team_approvals > self.num_players
         if approved:
-            print("Current team is approved!")
+            if self.enable_logs: print("Current team is approved!")
             self.initialize_quest_vote_round()
         else:
-            print("Team approval failed")
+            if self.enable_logs: print("Team approval failed")
             self.initialize_team_selection_round()
 
     def make_quest_vote_move(self, player, override_choice=None):
@@ -138,23 +142,45 @@ class Quest:
         if not response:
             response = player.success_or_fail()
 
-        print(f'{player} {"Passed" if response else "Failed"} the quest')
+        if self.enable_logs: print(f'{player} {"Passed" if response else "Failed"} the quest')
 
-        if response is False:
-            # Mission failed
-            print(f'Mission Failed due to {player}')
-            return self.conclude_quest(False)
+        self.mission_fails += response==False
+
+        # if response is False:
+        #     # Mission failed
+        #     if self.enable_logs: print(f'Mission Failed due to {player}')
+        #     return self.conclude_quest(False)
 
         if not self.pending_turns[ActionType.QUEST_VOTE]:
-            # Mission succeeded
-            print(f'Mission Succeeded!')
-            return self.conclude_quest(True)
+            # if self.enable_logs: print(f'Mission Succeeded!')
+            # return self.conclude_quest(True)
+            return self.conclude_quest_majority()
 
+    """
     def conclude_quest(self, success):
         if success:
-            print("Good team won the quest!")
+            if self.enable_logs: print("Good team won the quest!")
             self.quest_winner = Team.GOOD
         else:
-            print("Evil team won the quest!")
+            if self.enable_logs: print("Evil team won the quest!")
             self.quest_winner = Team.EVIL
         return self.quest_winner
+    """
+
+    def conclude_quest_majority(self):
+        # If more than half people fail mission, then only it's a fail
+        success = 2 * self.mission_fails < self.team_size
+        if success:
+            if self.enable_logs: print("Good team won the quest!")
+            self.quest_winner = Team.GOOD
+        else:
+            if self.enable_logs: print("Evil team won the quest!")
+            self.quest_winner = Team.EVIL
+
+        self.mission_fails = 0
+        self._update_player_histories()
+        return self.quest_winner
+
+    def _update_player_histories(self):
+        for player in self.current_team:
+            player.mission_history.append(self.quest_winner is Team.GOOD)

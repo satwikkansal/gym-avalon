@@ -7,7 +7,7 @@ from collections import namedtuple
 
 import random
 
-from game.enums import ActionType, CharacterType, Team
+from game.enums import ActionType, CharacterType, Team, MAX_QUESTS
 from game.player import Player
 from game.quest import Quest
 
@@ -26,6 +26,8 @@ game_player_configs = {
 }
 
 
+
+
 class GameFeedback:
     """
     The glue between environment and the game. The AvalonGame.run function
@@ -40,6 +42,7 @@ class GameFeedback:
         self.game_winner = game.winner
         self.quest_winner = quest.quest_winner
         self.quest_number = quest.id
+        self.quest_team_size = quest.team_size
         self.proposal_number = quest.current_proposal_number
         self.leader = quest.current_leader
         self.evil_wins = game.evil_team_wins
@@ -48,16 +51,18 @@ class GameFeedback:
         self.current_team = [0] * game.num_players
         for player in quest.current_team:
             self.current_team[player.player_id] = 1
+        self.current_team = tuple(self.current_team)
 
 
 class AvalonGame:
     """
     The main game class.
     """
-    def __init__(self, num_players, max_quests=5, max_proposals_allowed=5):
+    def __init__(self, num_players, max_quests=MAX_QUESTS, max_proposals_allowed=5, enable_logs=True):
         """
         Setting up logic for the game goes here. Number of players are configurable.
         """
+        self.enable_logs = enable_logs
         self.num_players = num_players
         self.players = self.initialize_players()
 
@@ -89,7 +94,8 @@ class AvalonGame:
         self.current_quest = Quest(quest_num=quest_num,
                                    team_size=self.quest_sizes[quest_num],
                                    players=self.players,
-                                   leader=leader)
+                                   leader=leader,
+                                   enable_logs=self.enable_logs)
         self.current_player = self.current_quest.current_leader
 
     def __str__(self):
@@ -114,11 +120,9 @@ class AvalonGame:
         assert good_count + evil_count == self.num_players
 
         players = []
-        for player_id in player_order:
-            if player_id + 1 < good_count:
+        for player_id, order in enumerate(player_order):
+            if order + 1 <= good_count:
                 player = Player(player_id, CharacterType.SERVANT)
-            elif player_id + 1 == good_count:
-                player = Player(player_id, CharacterType.MERLIN)
             else:
                 player = Player(player_id, CharacterType.MINION)
             players.append(player)
@@ -164,7 +168,7 @@ class AvalonGame:
 
             return GameFeedback(self)
 
-        raise Exception("Game entered in some unknown path")
+        raise Exception(f"Game entered in some unknown path for action type {quest.current_action_type}")
 
     def update_scores(self, winner):
         self.good_team_wins += winner == Team.GOOD
