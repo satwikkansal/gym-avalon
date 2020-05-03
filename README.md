@@ -13,3 +13,14 @@ Separate because, tabular q-learning agent doesn't use tensorflow and trains sli
  
 The `training.ipynb` file is jupyter notebook plotting graphs for q-learning agent.
  
+### Tensorboard
+
+The directory is specified in `TENSORBOARD_LOG` variable in `baseline_trial.py` file. The default folder is `ppo2_tensorboard`.
+
+To lauch tensorboard you need to provide path to this directory.
+
+```shell script
+$ tensorboard --logdir ./ppo2_tensorboard/
+```
+
+This should give you a link that you can browse in your browser. 
