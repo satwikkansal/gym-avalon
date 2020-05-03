@@ -2,30 +2,11 @@
 This is the module that pieces together various components of the game (Quests, Players)
 and serves as an interface to take actions in the game.
 """
-
-from collections import namedtuple
-
 import random
 
-from game.enums import ActionType, CharacterType, Team, MAX_QUESTS
+from game.enums_and_config import ActionType, CharacterType, Team, MAX_QUESTS, game_player_configs
 from game.player import Player
 from game.quest import Quest
-
-
-player_config = namedtuple('player_config', ['team_split', 'quest_size'])
-
-
-game_player_configs = {
-    5: player_config([3, 2], [2, 3, 2, 3, 3]),
-    6: player_config([4, 2], [2, 3, 4, 3, 4]),
-    7: player_config([4, 3], [2, 3, 3, 4, 4]),
-    8: player_config([5, 3], [3, 4, 4, 5, 5]),
-    9: player_config([6, 3], [3, 4, 4, 5, 5]),
-    10: player_config([6, 4], [3, 4, 4, 5, 5]),
-    11: player_config([7, 4], [4, 5, 4, 5, 5])
-}
-
-
 
 
 class GameFeedback:
