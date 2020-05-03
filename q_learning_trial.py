@@ -9,7 +9,10 @@ from agent import RandomAgent, QTableAgent
 from game.enums_and_config import CharacterType
 
 
-def evaluate(model, env, num_episodes):
+def evaluate(agent, env, num_episodes):
+    """
+    Evaluate the agent, on a new envrionment instance.
+    """
     reward_so_far = []
     penalties_so_far = []
     agent_game_results = defaultdict(list)
@@ -22,7 +25,7 @@ def evaluate(model, env, num_episodes):
         _info = None
 
         while not done:
-            action = model.predict(obs, _info)
+            action = agent.predict(obs, _info)
             obs, reward, done, _info = env.step(action)
 
             # Every -ve reward counts as penalty
@@ -45,6 +48,10 @@ def evaluate(model, env, num_episodes):
 
 
 def callback(env, model, save_path, best_mean_reward, num_eval_episodes=100, target_reward=None):
+    """
+    Callback method that, evaluates performance, prints out metrics, saves the best models, and
+    terminates training if target reward is achieved.
+    """
     eval_rewards, eval_penalties, eval_agent_results = evaluate(model, env, num_eval_episodes)
     mean_eval_reward, std_eval_reward = np.mean(eval_rewards), np.std(eval_rewards)
     print()
@@ -63,12 +70,12 @@ def callback(env, model, save_path, best_mean_reward, num_eval_episodes=100, tar
         print(f"Achieved reward of {mean_eval_reward}, halting training")
         print(f"Saving new best model to {save_path}")
         save(model.q_table, save_path)
-        return False
+        return False # Signal to terminate training
 
     return True
 
 
-def train(num_episodes, env, agent, last_n_plot=50, callback_every=5000):
+def train(num_episodes, env, agent, target_reward=4, last_n_plot=100, callback_every=5000):
     """
     The method to train the agent.
     :param num_episodes: number of episodes (game instances) to train the agent for
@@ -91,7 +98,7 @@ def train(num_episodes, env, agent, last_n_plot=50, callback_every=5000):
 
     for curr_episode in range(num_episodes):
         if curr_episode % callback_every == 0:
-            should_continue = callback(env, agent, "q_table.pickle", best_mean_reward, 100, 4.3)
+            should_continue = callback(env, agent, "q_table.pickle", best_mean_reward, last_n_plot, target_reward)
             if not should_continue:
                 break
 
@@ -142,27 +149,31 @@ def print_summary(agent_game_results):
 
 
 def save(model, save_path):
+    """
+    Save the q-table as pickle
+    """
     with open(save_path, "wb") as f:
         d = dict(model)
         pickle.dump(d, f)
 
 
-"""
-Usage,
+if __name__ == "__main__":
+    """
+    Usage,
 
-- When autoplay is true, all the agent actions are nullified and the game is played automatically as per heuristics
-present in the Player class.
-- Pass enable_logs as True to debug and see step by step game state changes.
-"""
-env = AvalonEnv(6, enable_logs=False, autoplay=False)
+    - When autoplay is true, all the agent actions are nullified and the game is played automatically as per heuristics
+    present in the Player class.
+    - Pass enable_logs as True to debug and see step by step game state changes.
+    """
+    env = AvalonEnv(6, enable_logs=False, autoplay=False)
 
-agent = QTableAgent(env=env)
-num_episodes = 50000
-rewards, penalties, agent_game_results = train(num_episodes, env, agent)
+    agent = QTableAgent(env=env)
+    num_episodes = 50000
+    rewards, penalties, agent_game_results = train(num_episodes, env, agent)
 
-# A nice way to get the q-table and sort it by q-values
-# Inspecting the extreme q values (+ve or -ve) help us to see what exactly agent is learning from experiences.
-# A nice way to debug and add new features as well.
-servant_table = sorted(flatten(agent.q_table[CharacterType.SERVANT]).items(), key=lambda x: x[1])
-print_summary(agent_game_results)
+    # A nice way to get the q-table and sort it by q-values
+    # Inspecting the extreme q values (+ve or -ve) help us to see what exactly agent is learning from experiences.
+    # A nice way to debug and add new features as well.
+    servant_table = sorted(flatten(agent.q_table[CharacterType.SERVANT]).items(), key=lambda x: x[1])
+    print_summary(agent_game_results)
 
