@@ -3,6 +3,9 @@ import numpy as np
 import random
 
 
+def float_dd():
+    return defaultdict(float)
+
 class Agent:
     def __init__(self, env):
         self.env = env
@@ -83,7 +86,7 @@ class QTableAgent(Agent):
     @staticmethod
     def _init_q_table_for_char_type():
         # Default value of 0 for every state-action pair
-        return defaultdict(lambda: defaultdict(float))
+        return defaultdict(float_dd)
 
     def get_q_table(self, char_type):
         """
@@ -96,31 +99,40 @@ class QTableAgent(Agent):
 
     def get_next_action(self, new_obs, reward, info):
         q_table = self.get_q_table(info['char_type'])
-        old_obs = info['prev_obs']
+
+        new_obs = tuple(new_obs)
         action_taken = info['prev_action']
 
-        if action_taken:
+        if action_taken is not None:
             # Team selection Action needs to be casted to a tuple to store in a dictionary
-            action_taken = (tuple(action_taken[0]), action_taken[1], action_taken[2])
+            # action_taken = (tuple(action_taken[0]), action_taken[1], action_taken[2])
             # Updating the q_values as per bellman equation
+            action_taken = tuple(action_taken)
+            old_obs = tuple(info['prev_obs'])
             old_value = q_table[old_obs][action_taken]
             next_max = max(q_table[new_obs].values()) if len(q_table[new_obs].values()) > 0 else 0.0
             new_value = (1 - self.alpha) * old_value + self.alpha * (reward + self.gamma * next_max)
             q_table[old_obs][action_taken] = new_value
 
-        return self._select_next_action(q_table, new_obs, info)
+        return self.predict(new_obs, info)
 
-    def _select_next_action(self, q_table, obs, info):
+    def predict(self, obs, info):
         """
         Select next action based on epsilon-greedy method.
         TODO: Use better strategy for exploration than the epsilon-greedy method.
         """
+        random_action = self.env.action_space.sample()
+        if info is None:
+            return random_action
+
+        q_table = self.get_q_table(info['char_type'])
         random_val = random.uniform(0, 1)
-        random_action = self._sample(info['num_players'], info['quest_team_size'])
+        #random_action = self._sample(info['num_players'], info['quest_team_size'])
         if random_val < self.epsilon:
             action = random_action  # Explore action space
         else:
-            q_vals = q_table[obs]
+            q_vals = q_table[tuple(obs)]
             action = max(q_vals, key=q_vals.get, default=random_action)  # Exploit learned values
-            action = (np.array(action[0]), action[1], action[2])
+            #action = (np.array(action[0]), action[1], action[2])
+            action = list(action)
         return action
