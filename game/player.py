@@ -1,6 +1,6 @@
 import numpy as np
 
-from game.enums import CharacterType, Team
+from game.enums_and_config import CharacterType, Team
 
 """
 Good player strategies,

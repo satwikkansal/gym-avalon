@@ -1,5 +1,7 @@
-from game.enums import ActionType, Team
+from game.enums_and_config import ActionType, Team
 from game.player import  Player
+
+import numpy as np
 
 
 class Quest:
