@@ -29,10 +29,11 @@ class GameFeedback:
         self.evil_wins = game.evil_team_wins
         self.initiate_new_quest = initiate_new_quest
 
-        self.current_team = [0] * game.num_players
-        for player in quest.current_team:
-            self.current_team[player.player_id] = 1
-        self.current_team = tuple(self.current_team)
+        # self.current_team = [0] * game.num_players
+        # for player in quest.current_team:
+        #     self.current_team[player.player_id] = 1
+        # self.current_team = tuple(self.current_team)
+        self.current_team = quest.current_team
 
 
 class AvalonGame:
