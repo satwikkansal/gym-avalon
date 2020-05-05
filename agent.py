@@ -76,7 +76,7 @@ class QTableAgent(Agent):
         }
     }
     """
-    def __init__(self, alpha=0.1, gamma=0.6, epsilon=0.2, **kwargs):
+    def __init__(self, alpha=0.1, gamma=0.9, epsilon=0.2, **kwargs):
         super(QTableAgent, self).__init__(**kwargs)
         self.q_table = {}
         self.epsilon = epsilon
@@ -114,9 +114,9 @@ class QTableAgent(Agent):
             new_value = (1 - self.alpha) * old_value + self.alpha * (reward + self.gamma * next_max)
             q_table[old_obs][action_taken] = new_value
 
-        return self.predict(new_obs, info)
+        return self.predict(new_obs, info, False)
 
-    def predict(self, obs, info):
+    def predict(self, obs, info, direct=True):
         """
         Select next action based on epsilon-greedy method.
         TODO: Use better strategy for exploration than the epsilon-greedy method.
@@ -128,7 +128,7 @@ class QTableAgent(Agent):
         q_table = self.get_q_table(info['char_type'])
         random_val = random.uniform(0, 1)
         #random_action = self._sample(info['num_players'], info['quest_team_size'])
-        if random_val < self.epsilon:
+        if not direct and random_val < self.epsilon:
             action = random_action  # Explore action space
         else:
             q_vals = q_table[tuple(obs)]
