@@ -75,7 +75,8 @@ class AvalonEnv(gym.Env):
 
         # Use MultiDiscrete action and observation spaces instead
         self.action_space = MultiDiscrete([len(team_selection_move_map[self.num_players]), 3, 3])
-
+        
+        # Player visibilites, action type, current quest, proposal number, current leader
         obs_space = [len(PlayerVisibility)] * self.num_players
         obs_space += [len(ActionType), self.game.max_quests, self.num_players, self.num_players]
 
@@ -109,8 +110,11 @@ class AvalonEnv(gym.Env):
                 # Evil agent has full visibility about the player's team
                 visibilities.append(PlayerVisibility[(player.team, in_team, passed_missions, failed_missions)])
             else:
-                # Good agent has no visibility about the player's team
-                visibilities.append(PlayerVisibility[(Team.UNKNOWN, in_team, passed_missions, failed_missions)])
+                if player is self.agent:
+                    visibilities.append(PlayerVisibility[(Team.GOOD, in_team, passed_missions, failed_missions)])
+                else:
+                    # Good agent has no visibility about the player's team
+                    visibilities.append(PlayerVisibility[(Team.UNKNOWN, in_team, passed_missions, failed_missions)])
 
         # Pack into an observation
         # Note this structure should conform to the one defined in self.observation_space
