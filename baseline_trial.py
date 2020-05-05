@@ -44,7 +44,7 @@ def evaluate(model, env, num_episodes):
             obs, reward, done, _info = env.step(action)
 
             # Every -ve reward counts as penalty
-            if reward < 0:
+            if 0 > reward > -1:
                 episode_penalties += 1
 
             episode_reward += reward
@@ -157,9 +157,11 @@ if __name__ == "__main__":
     RANDOM_SEED = 90
     MULTIPROCESS = None  # Keep it to None for now. Don't change.
     NUM_EVAL_EPISODES = 100
-    LOG_DIR = "./monitor/"
-    TENSORBOARD_LOG = "./ppo2_tensorboard/"
+    LOG_DIR = "./monitor/ppo2/"
+    TENSORBOARD_LOG = "./tensorboard_logs/"
     #TENSORBOARD_LOG = None
+
+    os.makedirs(LOG_DIR, exist_ok=True)
 
     # Params for our AvalonEnv
     env_kwargs = dict(num_players=5, enable_logs=False, autoplay=False)
@@ -175,15 +177,15 @@ if __name__ == "__main__":
         env = DummyVecEnv([lambda: Monitor(env, LOG_DIR)])
 
     # Initializing our callback
-    callback = CustomCallback(check_freq=2000, log_dir=LOG_DIR, num_eval_episodes=NUM_EVAL_EPISODES, target_reward=5)
+    callback = CustomCallback(check_freq=2000, log_dir=LOG_DIR, num_eval_episodes=NUM_EVAL_EPISODES, target_reward=5.2)
 
 
     # Initializing the model
     #model = PPO2(MlpLstmPolicy, env, tensorboard_log=TENSORBOARD_LOG, nminibatches=1) # ineffective
-    model = PPO2(MlpPolicy, env, tensorboard_log=TENSORBOARD_LOG) # works nicely, achieved reward of 4+
-    #model = A2C(MlpPolicy, env, tensorboard_log=TENSORBOARD_LOG) # works, but not as good as PPO2, reward of 3.6
-    #model = TRPO(MlpPolicy, env, tensorboard_log=TENSORBOARD_LOG) # also effective, reward of 5+
+    #model = PPO2(MlpPolicy, env, tensorboard_log=TENSORBOARD_LOG) # works nicely, achieved reward of 4+
+    model = A2C(MlpPolicy, env, tensorboard_log=TENSORBOARD_LOG) # works, but not as good as PPO2, reward of 3.6
+    #model = TRPO(MlpPolicy, env, tensorboard_log=TENSORBOARD_LOG)  # also effective, reward of 5+
 
     # Training the model, for `total_timesteps` timesteps.
-    model.learn(total_timesteps=1000000, callback=callback)
+    model.learn(total_timesteps=500000, callback=callback)
     env.close()
