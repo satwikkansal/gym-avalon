@@ -28,8 +28,8 @@ def evaluate(agent, env, num_episodes):
             action = agent.predict(obs, _info)
             obs, reward, done, _info = env.step(action)
 
-            # Every -ve reward counts as penalty
-            if reward < 0:
+            # Illegal action rewards counts as penalty
+            if 0 > reward > -1:
                 episode_penalties += 1
 
             episode_reward += reward
@@ -57,7 +57,14 @@ def callback(env, model, save_path, best_mean_reward, num_eval_episodes=100, tar
     print()
     print(f"Average reward per episode {np.mean(eval_rewards)}")
     print(f"Average penalties per episode: {np.mean(eval_penalties)}")
-    print_summary(eval_agent_results)
+
+    win_percent_by_ctype = {}
+    for char_type, game_results in eval_agent_results.items():
+        total_games = len(game_results)
+        total_wins = np.sum(game_results)
+        win_percent = total_wins / total_games * 100
+        win_percent_by_ctype[char_type] = win_percent
+        print(f'Agent won {win_percent}% games out of {total_games} games while taking {char_type.name} role.')
 
     # New best model, you could save the agent here
     if mean_eval_reward > best_mean_reward:
@@ -72,7 +79,7 @@ def callback(env, model, save_path, best_mean_reward, num_eval_episodes=100, tar
         save(model.q_table, save_path)
         return False # Signal to terminate training
 
-    return True
+    return win_percent_by_ctype
 
 
 def train(num_episodes, env, agent, target_reward=4, last_n_plot=100, callback_every=5000):
@@ -98,9 +105,12 @@ def train(num_episodes, env, agent, target_reward=4, last_n_plot=100, callback_e
 
     for curr_episode in range(num_episodes):
         if curr_episode % callback_every == 0:
-            should_continue = callback(env, agent, "q_table.pickle", best_mean_reward, last_n_plot, target_reward)
-            if not should_continue:
+            win_percent_map = callback(env, agent, "q_table.pickle", best_mean_reward, last_n_plot, target_reward)
+            if win_percent_map is False:
                 break
+            else:
+                for ctype, percent in win_percent_map.items():
+                    agent_game_results[ctype].append(percent)
 
         obs, info = env.reset(external=False)
         info['prev_obs'] = None
@@ -122,9 +132,6 @@ def train(num_episodes, env, agent, target_reward=4, last_n_plot=100, callback_e
 
             episode_reward += reward
 
-            if done:  # game over
-                agent_game_results[env.agent.char_type].append(env.game.winner == env.agent.team)
-
         reward_so_far.append(episode_reward)
         penalties_so_far.append(episode_penalties)
         last_n_avg_reward.append(np.mean(reward_so_far))
@@ -135,17 +142,6 @@ def train(num_episodes, env, agent, target_reward=4, last_n_plot=100, callback_e
         # print(f"Average reward per episode {np.mean(reward_so_far)}")
         # print(f"Average penalties per episode: {np.mean(penalties_so_far)}")
     return last_n_avg_reward, last_n_avg_penalties, agent_game_results
-
-
-def print_summary(agent_game_results):
-    """
-    Helper method to print summary of the agent results.
-    """
-    for char_type, game_results in agent_game_results.items():
-        total_games = len(game_results)
-        total_wins = np.sum(game_results)
-        win_percent = total_wins / total_games * 100
-        print(f'Agent won {win_percent}% games out of {total_games} games while taking {char_type.name} role.')
 
 
 def save(model, save_path):
@@ -165,15 +161,16 @@ if __name__ == "__main__":
     present in the Player class.
     - Pass enable_logs as True to debug and see step by step game state changes.
     """
-    env = AvalonEnv(6, enable_logs=False, autoplay=False)
+    env = AvalonEnv(5, enable_logs=False, autoplay=False)
 
     agent = QTableAgent(env=env)
-    num_episodes = 50000
+    num_episodes = 150000
     rewards, penalties, agent_game_results = train(num_episodes, env, agent)
 
     # A nice way to get the q-table and sort it by q-values
     # Inspecting the extreme q values (+ve or -ve) help us to see what exactly agent is learning from experiences.
     # A nice way to debug and add new features as well.
     servant_table = sorted(flatten(agent.q_table[CharacterType.SERVANT]).items(), key=lambda x: x[1])
-    print_summary(agent_game_results)
+    servant_table_reversed = list(reversed(servant_table))
+
 
