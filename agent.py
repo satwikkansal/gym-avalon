@@ -6,6 +6,7 @@ import random
 def float_dd():
     return defaultdict(float)
 
+
 class Agent:
     def __init__(self, env):
         self.env = env
@@ -43,7 +44,11 @@ class RandomAgent(Agent):
         super(RandomAgent, self).__init__(**kwargs)
 
     def get_next_action(self, obs, reward, info):
-        return self._sample(info['num_players'], info['quest_team_size'])
+        return self.predict(obs, info)
+        #return self._sample(info['num_players'], info['quest_team_size'])
+
+    def predict(self, obs, info):
+        return self.env.action_space.sample()
 
 
 class QTableAgent(Agent):

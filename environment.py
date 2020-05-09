@@ -38,7 +38,7 @@ Blackjack https://github.com/openai/gym/blob/master/gym/envs/toy_text/blackjack.
 class AvalonEnv(gym.Env):
     metadata = {'render.modes': ['human']}
 
-    def __init__(self, num_players, enable_logs, autoplay=False):
+    def __init__(self, num_players, enable_logs, autoplay=False, enable_penalties=True):
         """
         :param num_players: Number of players to set up the game for. Passed as an arg to game initialization.
         :param enable_logs: Pass enable_logs as True to debug and see step by step game state changes.
@@ -48,6 +48,7 @@ class AvalonEnv(gym.Env):
         super(AvalonEnv, self).__init__()
         self.enable_logs = enable_logs
         self.autoplay = autoplay
+        self.enable_penalties = enable_penalties
 
         self.num_players = num_players
         self._initialize_game(num_players, enable_logs)
@@ -92,7 +93,7 @@ class AvalonEnv(gym.Env):
         self.quests_history = []
         self.quest_reward_count = 0
 
-    def _convert_game_feedback_to_observation(self, feedback, prev_action):
+    def _convert_game_feedback_to_observation(self, feedback, prev_action, penalties):
         """
         The method that creates the observation and info object for the environment.
         It uses feedback received from the game to do so.
@@ -144,7 +145,8 @@ class AvalonEnv(gym.Env):
             'num_players': self.game.num_players,
             'quest_team_size': feedback.quest_team_size,
             'game_winner': feedback.game_winner,
-            'agent_team': self.agent.team
+            'agent_team': self.agent.team,
+            'num_penalties': penalties
         }
 
         return obs, info
@@ -160,8 +162,8 @@ class AvalonEnv(gym.Env):
         action_type = self.game.current_quest.current_action_type
         agent_action_feedback = self._take_action(action, action_type)
         feedback = self._get_agent_feedback(agent_action_feedback)
-        obs, info = self._convert_game_feedback_to_observation(feedback, action)
-        reward = self.compute_reward(feedback, action, action_type)
+        reward, penalties = self.compute_reward(feedback, action, action_type)
+        obs, info = self._convert_game_feedback_to_observation(feedback, action, penalties)
         done = feedback.game_winner is not None
 
         return obs, reward, done, info
@@ -179,44 +181,49 @@ class AvalonEnv(gym.Env):
         - Game loss results in -ve reward
         """
         reward = 0
+        num_penalties = 0
 
         # Reward for winning / losing the quests
         if self.quest_reward_count < len(self.quests_history):
             last_quest = self.quests_history[-1]
             if last_quest.quest_winner == self.agent.team:
-                reward += 2
+                reward += 1
             else:
-                reward -= 2
+                reward -= 1
             self.quest_reward_count += 1
 
         # Reward for winning / losing the game
         if feedback.game_winner is not None:
             if feedback.game_winner == self.agent.team:
-                reward += 1
+                reward += 2
             else:
-                reward -= 1
+                reward -= 2
+
+        relevant_action = self._get_relevant_value_for_action(action, action_type)
+
+        if relevant_action is None and self.enable_penalties:
+            # Penalize for not following the relevant action
+            reward -= 0.5
+            num_penalties += 1
+        else:
+            reward += 0.1
 
         for at in ActionType:
             if at == ActionType.TEAM_SELECTION:
-                relevant_action = self._get_relevant_value_for_action(action, action_type)
-                if relevant_action is None:
-                    # This case occurs when the agent selects invalid team (one of wrong size)
-                    reward -= 0.4
-                else:
-                    reward += 0.1
-            # Invalid action supplied by agent instead of a No-OP (0 value)
-            if at != action_type and action[at.value]:
+                continue
+            if at != action_type and action[at.value] and self.enable_penalties:
                 reward -= 0.5
+                num_penalties += 1
             else:
                 reward += 0.1
 
-        return reward
+        return reward, num_penalties
 
     def reset(self, external=True):
         # Reset all the stuff
         self._initialize_game(self.num_players, self.enable_logs)
         feedback = self._get_agent_feedback()
-        obs, info = self._convert_game_feedback_to_observation(feedback, None)
+        obs, info = self._convert_game_feedback_to_observation(feedback, None, 0)
         if external:
             return obs
         return obs, info

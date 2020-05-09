@@ -8,6 +8,8 @@ from environment import AvalonEnv
 from agent import RandomAgent, QTableAgent
 from game.enums_and_config import CharacterType
 
+BEST_MEAN_REWARD = -float('inf')
+
 
 def evaluate(agent, env, num_episodes):
     """
@@ -28,10 +30,6 @@ def evaluate(agent, env, num_episodes):
             action = agent.predict(obs, _info)
             obs, reward, done, _info = env.step(action)
 
-            # Illegal action rewards counts as penalty
-            if 0 > reward > -1:
-                episode_penalties += 1
-
             episode_reward += reward
 
             if done: # game over
@@ -40,6 +38,7 @@ def evaluate(agent, env, num_episodes):
                 else:
                     info = _info
                 agent_game_results[info['char_type']].append(info['game_winner'] == info['agent_team'])
+                episode_penalties += info['num_penalties']
 
         reward_so_far.append(episode_reward)
         penalties_so_far.append(episode_penalties)
@@ -47,13 +46,13 @@ def evaluate(agent, env, num_episodes):
     return reward_so_far, penalties_so_far, agent_game_results
 
 
-def callback(env, model, save_path, best_mean_reward, num_eval_episodes=100, target_reward=None):
+def callback(env, model, save_path, num_eval_episodes=100, target_reward=None):
     """
     Callback method that, evaluates performance, prints out metrics, saves the best models, and
     terminates training if target reward is achieved.
     """
     eval_rewards, eval_penalties, eval_agent_results = evaluate(model, env, num_eval_episodes)
-    mean_eval_reward, std_eval_reward = np.mean(eval_rewards), np.std(eval_rewards)
+    mean_eval_reward, std_eval_reward, mean_eval_penalties = np.mean(eval_rewards), np.std(eval_rewards), np.mean(eval_penalties)
     print()
     print(f"Average reward per episode {np.mean(eval_rewards)}")
     print(f"Average penalties per episode: {np.mean(eval_penalties)}")
@@ -66,20 +65,22 @@ def callback(env, model, save_path, best_mean_reward, num_eval_episodes=100, tar
         win_percent_by_ctype[char_type] = win_percent
         print(f'Agent won {win_percent}% games out of {total_games} games while taking {char_type.name} role.')
 
+    global BEST_MEAN_REWARD
     # New best model, you could save the agent here
-    if mean_eval_reward > best_mean_reward:
-        best_mean_reward = mean_eval_reward
+    if mean_eval_reward > BEST_MEAN_REWARD:
+        BEST_MEAN_REWARD = mean_eval_reward
         # Saving best model
         print(f"Saving new best model to {save_path}")
-        save(model.q_table, save_path)
+        #TODO: Enable save later on
+        #save(model.q_table, save_path)
 
     if target_reward and mean_eval_reward > target_reward:
         print(f"Achieved reward of {mean_eval_reward}, halting training")
         print(f"Saving new best model to {save_path}")
         save(model.q_table, save_path)
-        return False # Signal to terminate training
+        return False  # Signal to terminate training
 
-    return win_percent_by_ctype
+    return win_percent_by_ctype, mean_eval_reward, std_eval_reward, mean_eval_penalties
 
 
 def train(num_episodes, env, agent, target_reward=4, last_n_plot=100, callback_every=5000):
@@ -93,19 +94,16 @@ def train(num_episodes, env, agent, target_reward=4, last_n_plot=100, callback_e
     """
     # Store last few metrics here
     # These will be useful for plotting and visualizing results later on.
-    reward_so_far = deque(maxlen=last_n_plot)
-    penalties_so_far = deque(maxlen=last_n_plot)
-
-    last_n_avg_reward = []
-    last_n_avg_penalties = []
-
+    episode_rewards, mean_eval_rewards, std_eval_rewards, mean_eval_penalties = [], [], [], []
     agent_game_results = defaultdict(list)
-
-    best_mean_reward = -float('inf')
 
     for curr_episode in range(num_episodes):
         if curr_episode % callback_every == 0:
-            win_percent_map = callback(env, agent, "q_table.pickle", best_mean_reward, last_n_plot, target_reward)
+            win_percent_map, mean_eval_reward, std_eval_reward, mean_eval_penalty = callback(env, agent, "q_table.pickle", last_n_plot, target_reward)
+            mean_eval_rewards.append(mean_eval_reward)
+            std_eval_rewards.append(std_eval_reward)
+            mean_eval_penalties.append(mean_eval_penalty)
+
             if win_percent_map is False:
                 break
             else:
@@ -118,30 +116,17 @@ def train(num_episodes, env, agent, target_reward=4, last_n_plot=100, callback_e
         done = False
 
         episode_reward = 0
-        episode_penalties = 0
 
         while not done:
             action = agent.get_next_action(obs, reward, info)
             prev_obs = obs
             obs, reward, done, info = env.step(action)
             info['prev_obs'] = prev_obs
-
-            # Every -ve reward counts as penalty
-            if reward < 0:
-                episode_penalties += 1
-
             episode_reward += reward
 
-        reward_so_far.append(episode_reward)
-        penalties_so_far.append(episode_penalties)
-        last_n_avg_reward.append(np.mean(reward_so_far))
-        last_n_avg_penalties.append(np.mean(penalties_so_far))
+        episode_rewards.append(episode_reward)
 
-        # Uncomment to print running statistics
-        # print(f"Results after {num_episodes} episodes:")
-        # print(f"Average reward per episode {np.mean(reward_so_far)}")
-        # print(f"Average penalties per episode: {np.mean(penalties_so_far)}")
-    return last_n_avg_reward, last_n_avg_penalties, agent_game_results
+    return episode_rewards, mean_eval_rewards, std_eval_rewards, mean_eval_penalties, agent_game_results
 
 
 def save(model, save_path):
@@ -161,11 +146,11 @@ if __name__ == "__main__":
     present in the Player class.
     - Pass enable_logs as True to debug and see step by step game state changes.
     """
-    env = AvalonEnv(5, enable_logs=False, autoplay=False)
+    env = AvalonEnv(5, enable_logs=False, autoplay=True, enable_penalties=False)
 
     agent = QTableAgent(env=env)
     num_episodes = 150000
-    rewards, penalties, agent_game_results = train(num_episodes, env, agent)
+    rewards, mean_eval_rewards, std_eval_rewards, mean_eval_penalties,  agent_game_results = train(num_episodes, env, agent)
 
     # A nice way to get the q-table and sort it by q-values
     # Inspecting the extreme q values (+ve or -ve) help us to see what exactly agent is learning from experiences.

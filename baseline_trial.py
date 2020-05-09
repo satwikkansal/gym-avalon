@@ -44,8 +44,8 @@ def evaluate(model, env, num_episodes):
             obs, reward, done, _info = env.step(action)
 
             # Every -ve reward counts as penalty
-            if 0 > reward > -1:
-                episode_penalties += 1
+            # if 0 > reward > -1:
+            #     episode_penalties += 1
 
             episode_reward += reward
 
@@ -55,6 +55,7 @@ def evaluate(model, env, num_episodes):
                 else:
                     info = _info
                 agent_game_results[info['char_type']].append(info['game_winner'] == info['agent_team'])
+                episode_penalties += info['num_penalties']
 
         reward_so_far.append(episode_reward)
         penalties_so_far.append(episode_penalties)
@@ -101,7 +102,7 @@ class CustomCallback(BaseCallback):
         :param tag: Name of the graph
         :param value: Value to plot
         """
-        summary = tf.Summary(value=[tf.Summary.Value(tag=tag, simple_value=value)])
+        summary = tf.Summary(value=[tf.Summary.Value(tag='evaluation_metric/' + tag, simple_value=value)])
         self.locals['writer'].add_summary(summary, self.num_timesteps)
 
     def _on_step(self):
@@ -141,7 +142,8 @@ class CustomCallback(BaseCallback):
                     self.best_mean_reward = mean_reward
                     # Saving best model
                     print(f"Saving new best model to {self.save_path}")
-                    self.model.save(self.save_path)
+                    #TODO: temporarily disabling save, will enable later on
+                    #self.model.save(self.save_path)
 
                 # Target achieved, quit training by returning False.
                 if self.target_reward and mean_eval_reward > self.target_reward:
@@ -158,7 +160,7 @@ if __name__ == "__main__":
     MULTIPROCESS = None  # Keep it to None for now. Don't change.
     NUM_EVAL_EPISODES = 100
     LOG_DIR = "./monitor/ppo2/"
-    TENSORBOARD_LOG = "./tensorboard_logs/"
+    TENSORBOARD_LOG = "./tensorboard/"
     #TENSORBOARD_LOG = None
 
     os.makedirs(LOG_DIR, exist_ok=True)
@@ -177,15 +179,15 @@ if __name__ == "__main__":
         env = DummyVecEnv([lambda: Monitor(env, LOG_DIR)])
 
     # Initializing our callback
-    callback = CustomCallback(check_freq=2000, log_dir=LOG_DIR, num_eval_episodes=NUM_EVAL_EPISODES, target_reward=5.2)
+    callback = CustomCallback(check_freq=2000, log_dir=LOG_DIR, num_eval_episodes=NUM_EVAL_EPISODES, target_reward=5)
 
+    model_classes = [TRPO, PPO2, A2C]
 
-    # Initializing the model
-    #model = PPO2(MlpLstmPolicy, env, tensorboard_log=TENSORBOARD_LOG, nminibatches=1) # ineffective
-    #model = PPO2(MlpPolicy, env, tensorboard_log=TENSORBOARD_LOG) # works nicely, achieved reward of 4+
-    model = A2C(MlpPolicy, env, tensorboard_log=TENSORBOARD_LOG) # works, but not as good as PPO2, reward of 3.6
-    #model = TRPO(MlpPolicy, env, tensorboard_log=TENSORBOARD_LOG)  # also effective, reward of 5+
+    # Specify the player sizes here
+    for player_size in [5, 6, 7]:
+        for model_class in model_classes:
+            model = model_class(MlpPolicy, env, tensorboard_log=f'{TENSORBOARD_LOG}{player_size}_players/')
+            # Training the model, for `total_timesteps` timesteps.
+            model.learn(total_timesteps=300000, callback=callback)
 
-    # Training the model, for `total_timesteps` timesteps.
-    model.learn(total_timesteps=500000, callback=callback)
     env.close()
