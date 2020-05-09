@@ -30,15 +30,16 @@ def evaluate(agent, env, num_episodes):
             action = agent.predict(obs, _info)
             obs, reward, done, _info = env.step(action)
 
-            episode_reward += reward
+            if type(_info) is list:
+                info = _info[0]
+            else:
+                info = _info
 
-            if done: # game over
-                if type(_info) is list:
-                    info = _info[0]
-                else:
-                    info = _info
+            episode_reward += reward
+            episode_penalties += info['num_penalties']
+
+            if done:  # game over
                 agent_game_results[info['char_type']].append(info['game_winner'] == info['agent_team'])
-                episode_penalties += info['num_penalties']
 
         reward_so_far.append(episode_reward)
         penalties_so_far.append(episode_penalties)

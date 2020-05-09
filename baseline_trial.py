@@ -49,13 +49,15 @@ def evaluate(model, env, num_episodes):
 
             episode_reward += reward
 
+            if type(_info) is list:  # Some models return info in the form of a list
+                info = _info[0]
+            else:
+                info = _info
+
+            episode_penalties += info['num_penalties']
+
             if done:  # game over
-                if type(_info) is list: # Some models return info in the form of a list
-                    info = _info[0]
-                else:
-                    info = _info
                 agent_game_results[info['char_type']].append(info['game_winner'] == info['agent_team'])
-                episode_penalties += info['num_penalties']
 
         reward_so_far.append(episode_reward)
         penalties_so_far.append(episode_penalties)
