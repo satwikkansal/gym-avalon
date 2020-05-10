@@ -40,11 +40,12 @@ class AvalonGame:
     """
     The main game class.
     """
-    def __init__(self, num_players, max_quests=MAX_QUESTS, max_proposals_allowed=5, enable_logs=True):
+    def __init__(self, num_players, max_quests=MAX_QUESTS, max_proposals_allowed=5, enable_logs=True, majority_rule=True):
         """
         Setting up logic for the game goes here. Number of players are configurable.
         """
         self.enable_logs = enable_logs
+        self.majority_rule = majority_rule
         self.num_players = num_players
         self.players = self.initialize_players()
 
@@ -77,7 +78,8 @@ class AvalonGame:
                                    team_size=self.quest_sizes[quest_num],
                                    players=self.players,
                                    leader=leader,
-                                   enable_logs=self.enable_logs)
+                                   enable_logs=self.enable_logs,
+                                   majority_rule=self.majority_rule)
         self.current_player = self.current_quest.current_leader
 
     def __str__(self):

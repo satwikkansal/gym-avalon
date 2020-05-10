@@ -59,7 +59,8 @@ class Player:
             for player in quest.current_team:
                 if player.team is Team.EVIL:
                     evils_in_team += 1
-            if evils_in_team >= majority_size:
+
+            if (evils_in_team >= majority_size) or (evils_in_team and not quest.majority_rule):
                 # If evils know they're in majority, they'll approve
                 # with some bluff factor.
                 p = evil_approve_bias

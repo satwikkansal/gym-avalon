@@ -38,7 +38,7 @@ Blackjack https://github.com/openai/gym/blob/master/gym/envs/toy_text/blackjack.
 class AvalonEnv(gym.Env):
     metadata = {'render.modes': ['human']}
 
-    def __init__(self, num_players, enable_logs, autoplay=False, enable_penalties=True):
+    def __init__(self, num_players, enable_logs, autoplay=False, enable_penalties=True, majority_rule=True):
         """
         :param num_players: Number of players to set up the game for. Passed as an arg to game initialization.
         :param enable_logs: Pass enable_logs as True to debug and see step by step game state changes.
@@ -49,6 +49,7 @@ class AvalonEnv(gym.Env):
         self.enable_logs = enable_logs
         self.autoplay = autoplay
         self.enable_penalties = enable_penalties
+        self.majority_rule =  majority_rule
 
         self.num_players = num_players
         self._initialize_game(num_players, enable_logs)
@@ -86,7 +87,7 @@ class AvalonEnv(gym.Env):
         )
 
     def _initialize_game(self, num_players, enable_logs):
-        self.game = AvalonGame(num_players, enable_logs=enable_logs)
+        self.game = AvalonGame(num_players, enable_logs=enable_logs, majority_rule=self.majority_rule)
         self.player_types = tuple(p.char_type.value for p in self.game.players)
         self.agent = list(filter(lambda x: x.player_id == 0, self.game.players))[0]  # Agent is the player with ID 0
         # Useful for computing the reward for winning / losing a quest

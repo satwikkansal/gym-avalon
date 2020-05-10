@@ -168,7 +168,7 @@ if __name__ == "__main__":
     os.makedirs(LOG_DIR, exist_ok=True)
 
     # Params for our AvalonEnv
-    env_kwargs = dict(num_players=5, enable_logs=False, autoplay=False)
+    env_kwargs = dict(num_players=5, enable_logs=False, autoplay=False, majority_rule=False)
     if MULTIPROCESS:
         # Multiprocessing function, doesn't seem to support monitoring though
         env = make_vec_env(AvalonEnv, n_envs=MULTIPROCESS, seed=RANDOM_SEED, env_kwargs=env_kwargs, vec_env_cls=SubprocVecEnv)

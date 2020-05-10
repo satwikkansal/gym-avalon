@@ -5,7 +5,7 @@ import numpy as np
 
 
 class Quest:
-    def __init__(self, quest_num, team_size, players, leader, enable_logs):
+    def __init__(self, quest_num, team_size, players, leader, enable_logs, majority_rule=True):
         self.enable_logs = enable_logs
         self.id = quest_num
         self.team_size = team_size
@@ -16,6 +16,8 @@ class Quest:
         self.current_team = []
         self.quest_team_approvals = 0
         self.mission_fails = 0
+
+        self.majority_rule = majority_rule
 
         # Info for keeping track of whose turn is next.
         self.current_action_type = ActionType.TEAM_SELECTION
@@ -151,19 +153,23 @@ class Quest:
         # The following comments are for the Previous version where a single
         # fail was enough to sabotage the mission.
 
-        # if response is False:
-        #     # Mission failed
-        #     if self.enable_logs: print(f'Mission Failed due to {player}')
-        #     return self.conclude_quest(False)
+        if response is False and self.majority_rule is False:
+            # Mission failed
+            if self.enable_logs: print(f'Mission Failed due to {player}')
+            return self.conclude_quest(False)
 
         if not self.pending_turns[ActionType.QUEST_VOTE]:
             # if self.enable_logs: print(f'Mission Succeeded!')
-            # return self.conclude_quest(True)
-            return self.conclude_quest_majority()
+            if self.majority_rule:
+                return self.conclude_quest_majority()
+            else:
+                return self.conclude_quest(True)
+
 
     """
     Previous version method of concluding quest where a single 
     fail was enough to sabotage the mission.
+    """
     def conclude_quest(self, success):
         if success:
             if self.enable_logs: print("Good team won the quest!")
@@ -171,8 +177,10 @@ class Quest:
         else:
             if self.enable_logs: print("Evil team won the quest!")
             self.quest_winner = Team.EVIL
+
+        self.mission_fails = 0
+        self._update_player_histories()
         return self.quest_winner
-    """
 
     def conclude_quest_majority(self):
         # If half or more team members fail mission, then only it's a fail
